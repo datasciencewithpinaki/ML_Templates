@@ -20,13 +20,13 @@ class EDA:
         self.target_feature = target_feature
 
 
-    def getColsWithManyNAs(self, na_allowed=EDA.NA_ALLOWED):
+    def getColsWithManyNAs(self):
         '''
         cols that have more than the allowed pct of rows 
         will get returned
         '''
-        self.NA_ALLOWED = na_allowed
-        thresh_na_count = int(na_allowed * self.df.shape[0])
+        # self.NA_ALLOWED = na_allowed
+        thresh_na_count = int(EDA.NA_ALLOWED * self.df.shape[0])
         op_str = f"NA count is at least {thresh_na_count} rows out of {self.df.shape[0]} | {thresh_na_count/ self.df.shape[0]:.2%}"
         print(op_str)
         cols_w_manyNAs = self.df.isna().sum()[self.df.isna().sum() > thresh_na_count].index.to_list()
@@ -41,6 +41,7 @@ class EDA:
         '''
         MAX_COL = 6
         nrow = 1
+        print(f"features to plot: {nbr}")
         if def_cols > MAX_COL:
             print(f"Defaulted to showing {MAX_COL} in one row")
             def_cols = MAX_COL
@@ -57,13 +58,14 @@ class EDA:
         return nrow, ncol
 
 
-    def plotCatgPlot(self, cols, figsize=(24,12), plot_type=sns.boxplot, def_cols=4):
+    def plotCatgPlot(self, cols, plot_type=sns.boxplot, def_cols=4, figsize2=(24,12)):
         '''
         get the plot for each of the catg 
         within the columns
         '''
-        nrow, ncol = getRowColCountForChart(len(cols), def_cols)
-        fig, ax = plt.subplots(nrow, ncol, figsize, sharey=True)
+        nrow, ncol = EDA.getRowColCountForChart(len(cols), def_cols)
+        print(nrow, ncol)
+        fig, ax = plt.subplots(nrow, ncol, figsize=figsize2, sharey=True)
 
         if nrow<2:
             for i, col in enumerate(cols):
@@ -101,18 +103,18 @@ class EDA:
         metrics_df.reset_index(drop=True, inplace=True)
         
         max_dev = metrics_df['dev'].quantile(EDA.MAX_QNTL)
-        thresh_l = EDA.THRESH * max_dev
+        thresh_l = EDA.DEV_THRESH * max_dev
         cols_w_low_dev = metrics_df[metrics_df['dev'] < thresh_l]['features'].to_list()
         
         return metrics_df, cols_w_low_dev
 
 
-    def getRankedCorr(self, cols, corr_thresh):
+    def getRankedCorr(self, cols):
         '''
         get ranked correlation between 
         each pair of feature
         '''
-        self.CORR_THRESH = corr_thresh
+        # self.CORR_THRESH = corr_thresh
         pair_key = []
         corr_val = []
         cnt=0
@@ -135,21 +137,21 @@ class EDA:
         corr_df['abs_corr_val'] = abs(corr_df['corr_val'])
         corr_df.sort_values(['abs_corr_val'], ascending=False, inplace=True)
         
-        h_corr_pair = corr_df[corr_df['abs_corr_val'] > corr_thresh]['feature_pair'].to_list()
+        h_corr_pair = corr_df[corr_df['abs_corr_val'] > EDA.CORR_THRESH]['feature_pair'].to_list()
         corr_df.drop(['abs_corr_val'], axis=1, inplace=True)
         corr_df.reset_index(drop=True, inplace=True)
         
         return corr_df, h_corr_pair
 
 
-    def getMultiCollFeatr(self, cols, corr_thresh=EDA.CORR_THRESH):
+    def getMultiCollFeatr(self, cols):
         '''
         input highly correlated features
         return features that need to be dropped 
         based on how are these features correlated 
         with target feature.
         '''
-        self.corr_df, h_corr_pair = self.getRankedCorr(cols, corr_thresh)
+        self.corr_df, h_corr_pair = self.getRankedCorr(cols)
 
         h_corr_pair_dict = {i:x.split("__") for i, x in enumerate(h_corr_pair)}
         multi_coll_featr = []
