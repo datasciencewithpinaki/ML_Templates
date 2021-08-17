@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 class PreProcess:
     '''
@@ -39,12 +40,21 @@ class PreProcess:
         ## Split DF
         self.splitDf()
         ## Impute Outliers in Numeric Cols
-        self.fitTransformOutl()
-        self.transformOutl()
+        self.X_train_imp = self.fitTransformOutl(self.X_train)
+        self.X_test_imp = self.transformOutl(self.X_test)
         ## Missing Value Treatment - Numeric & Catg
-
+        self.X_train_na_imp = self.fitImputeNa(self.X_train, self.X_train_imp)
+        self.X_test_na_imp = self.transformImputeNa(self.X_test, self.X_test_imp)
+        print(self.X_train_na_imp.shape)
+        print(self.X_test_na_imp.shape)
         ## Encoding Catg Features
-
+        self.getColsOheTargEncd()
+        self.X_train_na_imp = self.fit_transform_bktInfreqVal(self.X_train_na_imp)
+        self.X_test_na_imp = self.transform_bktInfreqVal(self.X_test_na_imp)
+        print(self.X_train_na_imp.shape)
+        print(self.X_test_na_imp.shape)
+        self.X_train_enc = self.combEncdNumCols(self.X_train_na_imp, training=True)
+        self.X_test_enc = self.combEncdNumCols(self.X_test_na_imp, training=False)
         ## Scaling DF
 
         ## Feature reduction like PCA or t-SNE
@@ -58,7 +68,7 @@ class PreProcess:
 
 
     ## ********* Impute Outliers in Numeric Cols ********* ##
-    def fitTransformOutl(self):
+    def fitTransformOutl(self, df):
         '''
         Fit outliers on training data and 
         fit the cut offs and finally 
@@ -72,38 +82,40 @@ class PreProcess:
             # if cntr > 3:
             #     break
             # print(col)
-            remove_zeros_dict[col], temp_cutoff_dict[col], imputed_col = self.cleanedUpOutl(col)
+            remove_zeros_dict[col], temp_cutoff_dict[col], imputed_col = self.cleanedUpOutl(df, col)
             X_train_imp = pd.concat([X_train_imp, imputed_col], axis=1)
             cntr+=1
         assert(X_train_imp.shape[1] == len(self.numeric_features_upd))
         self.remove_zeros_numCols = remove_zeros_dict
         self.imputation_cutoffs_numCols = temp_cutoff_dict
-        self.X_train_imp = X_train_imp
+        # self.X_train_imp = X_train_imp
         print(f"cols outlier transformed: {cntr} out of {len(self.numeric_features_upd)} successfully")
+        return X_train_imp
 
     
-    def transformOutl(self):
+    def transformOutl(self, df):
         cntr=0
         X_test_imp = pd.DataFrame()
         for col in self.numeric_features_upd:
             # if cntr > 2:
             #     break
-            col_ser = self.X_test[col].copy()
+            col_ser = df[col].copy()
             cut_off = self.imputation_cutoffs_numCols[col]
             remove_zeros = self.remove_zeros_numCols[col]
             imputed_col = PreProcess.imputeOutl(col_ser, cut_off, remove_zeros, strategy='clip')
             X_test_imp = pd.concat([X_test_imp, imputed_col], axis=1)
             cntr+=1
         assert(X_test_imp.shape[1] == len(self.numeric_features_upd))
-        self.X_test_imp = X_test_imp
+        # self.X_test_imp = X_test_imp
         print(f"cols outlier transformed: {cntr} out of {len(self.numeric_features_upd)} successfully")
+        return X_test_imp
 
 
-    def cleanedUpOutl(self, col:str):
+    def cleanedUpOutl(self, df, col:str):
         QUANTILE_LIST_LOWER = np.arange(0, 0.1, 0.01)
         QUANTILE_LIST_UPPER = np.arange(1, 0.9, -0.01)
         
-        col_ser = self.X_train[col].copy()
+        col_ser = df[col].copy()
         remove_zeros = PreProcess.removeZeros(col_ser)
         col_ser2 = col_ser[col_ser!=0] if remove_zeros else col_ser
         
@@ -156,9 +168,87 @@ class PreProcess:
 
 
     ## ********* Missing Value Treatment - Numeric & Catg ********* ##
+    def fitImputeNa(self, df, df_imp):
+        self.imputer_na_num = SimpleImputer(strategy='median')
+        X_train_na_imp_num = pd.DataFrame(self.imputer_na_num.fit_transform(df_imp[self.numeric_features_upd]), 
+                                    columns=self.numeric_features_upd)
+        
+        self.imputer_na_catg = SimpleImputer(strategy='most_frequent')
+        X_train_na_imp_catg = pd.DataFrame(self.imputer_na_catg.fit_transform(df[self.catg_features_upd]), 
+                                    columns=self.catg_features_upd)
+        X_train_na_imp = pd.concat([X_train_na_imp_num, X_train_na_imp_catg], axis=1)
+        assert(X_train_na_imp.shape[1] == len(self.numeric_features_upd + self.catg_features_upd))
+        assert(X_train_na_imp.shape[0] == df.shape[0])
+        return X_train_na_imp
+
+
+    def transformImputeNa(self, df, df_imp):
+        X_test_na_imp_num = pd.DataFrame(self.imputer_na_num.transform(df_imp[self.numeric_features_upd]), 
+                                    columns=self.numeric_features_upd)
+        X_test_na_imp_catg = pd.DataFrame(self.imputer_na_catg.transform(df[self.catg_features_upd]), 
+                                    columns=self.catg_features_upd)
+        X_test_na_imp = pd.concat([X_test_na_imp_num, X_test_na_imp_catg], axis=1)
+        assert(X_test_na_imp.shape[1] == len(self.numeric_features_upd + self.catg_features_upd))
+        assert(X_test_na_imp.shape[0] == df.shape[0])
+        # self.X_test_na_imp = X_test_na_imp
+        return X_test_na_imp
 
 
     ## ********* Encoding Catg Features ********* ##
+    def getColsOheTargEncd(self):
+        self.cols_for_target_encd = [col for col in self.catg_features_upd if self.X_train_na_imp[col].nunique() > 10]
+        self.cols_for_ohe = list(set(self.catg_features_upd).difference(set(self.cols_for_target_encd)))
+
+
+    def fit_transform_bktInfreqVal(self, df):
+        '''
+        Fitting on Training data
+        check if some values in a column are very rare
+        bucket all such values into 'Other'
+        Helps in reducing OHE columns later
+        '''
+        temp_df = df.copy()
+        value_prop_dict = {col: temp_df[col].value_counts(normalize=True) for col in self.cols_for_ohe}
+        self.value_prop_dict_final = {k: value_prop_dict[k][value_prop_dict[k] < 0.1].index.to_list() for k in value_prop_dict.keys()}
+        for k, v in self.value_prop_dict_final.items():
+            temp_df[k] = temp_df[k].map(lambda x: 'Other' if x in v else x)
+        return temp_df
+
+
+    def transform_bktInfreqVal(self, df):
+        '''
+        Transform Test data based on Fit
+        check if some values in a column are very rare
+        bucket all such values into 'Other'
+        Helps in reducing OHE columns later
+        '''
+        temp_df = df.copy()
+        for k, v in self.value_prop_dict_final.items():
+            temp_df[k] = temp_df[k].map(lambda x: 'Other' if x in v else x)
+        return temp_df
+
+
+    def getOheOutputCols(self, df):
+        col_ohe_val_dict = {col: list(df[col].unique()) for col in self.cols_for_ohe}
+        self.op_cols_for_ohe = [f"{k}_{v}" for k, vals in col_ohe_val_dict.items() for v in vals]
+        print(f"len of op cols for OHE: {len(self.op_cols_for_ohe)}")
+
+    
+    def combEncdNumCols(self, df, training:str='True'):
+        temp_df = df.copy()
+        print(f"comb encd + num func: {temp_df.shape}")
+        ## fit OHE on catg cols in training data
+        if training:
+            self.getOheOutputCols(temp_df[self.cols_for_ohe])
+            self.encoder_catg = OneHotEncoder(handle_unknown='ignore', sparse=False)
+            temp_df_ohe = pd.DataFrame(self.encoder_catg.fit_transform(temp_df[self.cols_for_ohe]), columns=self.op_cols_for_ohe)
+        ## transform catg cols in test data
+        else:  # training==False
+            temp_df_ohe = pd.DataFrame(self.encoder_catg.transform(temp_df[self.cols_for_ohe]), columns=self.op_cols_for_ohe)
+        ## add back numeric columns to OHE cols
+        cols_left = list(set(temp_df.columns).difference(set(self.cols_for_ohe)))
+        temp_df_ohe2 = pd.concat([temp_df[cols_left], temp_df_ohe], axis=1)
+        return temp_df_ohe2
 
 
     ## ********* Scaling DF ********* ##
