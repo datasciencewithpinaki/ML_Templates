@@ -165,3 +165,10 @@ class EDA:
         return self.multi_coll_featr
 
 
+    def getCols_w_lowDev(self, feature_lists):
+        cols_w_low_dev = []
+        for feature_list in feature_lists:
+            _, temp_cols = self.explainedDeviationByCols(feature_list)
+            cols_w_low_dev = cols_w_low_dev + temp_cols
+        print(f"number of cols with low dev: {len(cols_w_low_dev)}")
+        return cols_w_low_dev
