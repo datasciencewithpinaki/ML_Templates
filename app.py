@@ -90,8 +90,8 @@ print(f"Factors correlation with Target: {temp_df.corr()['label']}")
 ## setting up models
 ### model training
 model = RandomForestRegressor(random_state=0, )
-model.fit(PP_obj.X_train_dim_reduc, PP_obj.y_train)
-y_predict = model.predict(PP_obj.X_test_dim_reduc)
+model.fit(PP_obj.X_train_sc, PP_obj.y_train)
+y_predict = model.predict(PP_obj.X_test_sc)
 
 ### test prediction & evaluation
 metrics = [mean_absolute_percentage_error, mean_squared_error, r2_score]
